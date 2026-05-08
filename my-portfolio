@@ -1,0 +1,1535 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FloorEdit — 도면 편집기</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #0f1117;
+    --surface: #181c27;
+    --surface2: #1e2333;
+    --border: #2a3045;
+    --border2: #3a4560;
+    --accent: #4f8ef7;
+    --accent2: #2d6ef0;
+    --green: #34d399;
+    --yellow: #fbbf24;
+    --red: #f87171;
+    --text: #e2e8f0;
+    --text2: #94a3b8;
+    --text3: #4a5568;
+    --seat-study: #4f8ef7;
+    --seat-lecture: #a78bfa;
+    --seat-selected: #fbbf24;
+    --panel-w: 220px;
+    --prop-w: 200px;
+    --topbar-h: 48px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'IBM Plex Sans KR', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── TOP BAR ── */
+  #topbar {
+    height: var(--topbar-h);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    gap: 8px;
+    flex-shrink: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 500;
+    font-size: 13px;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+    margin-right: 8px;
+    white-space: nowrap;
+  }
+
+  .divider { width: 1px; height: 24px; background: var(--border); margin: 0 4px; }
+
+  .btn {
+    height: 30px;
+    padding: 0 12px;
+    border-radius: 5px;
+    border: 1px solid var(--border2);
+    background: var(--surface2);
+    color: var(--text);
+    font-family: 'IBM Plex Sans KR', sans-serif;
+    font-size: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .btn:hover { background: var(--border); border-color: var(--accent); }
+  .btn.primary { background: var(--accent2); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: var(--accent); }
+  .btn.danger { border-color: #f87171; color: var(--red); }
+  .btn.danger:hover { background: rgba(248,113,113,0.1); }
+
+  .spacer { flex: 1; }
+
+  #seat-counter {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    color: var(--green);
+    background: rgba(52,211,153,0.1);
+    border: 1px solid rgba(52,211,153,0.3);
+    border-radius: 5px;
+    padding: 0 10px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+  }
+
+  /* ── MAIN LAYOUT ── */
+  #main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── LEFT PANEL ── */
+  #left-panel {
+    width: var(--panel-w);
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+
+  .panel-section {
+    padding: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-title {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text3);
+    margin-bottom: 8px;
+  }
+
+  /* Tool buttons */
+  .tool-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+
+  .tool-btn {
+    height: 36px;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text2);
+    font-family: 'IBM Plex Sans KR', sans-serif;
+    font-size: 11px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    transition: all 0.15s;
+  }
+  .tool-btn .icon { font-size: 14px; line-height: 1; }
+  .tool-btn .label { font-size: 9px; }
+  .tool-btn:hover { background: var(--border); color: var(--text); }
+  .tool-btn.active { background: rgba(79,142,247,0.15); border-color: var(--accent); color: var(--accent); }
+
+  /* Seat items */
+  .seat-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    cursor: grab;
+    margin-bottom: 4px;
+    font-size: 11px;
+    color: var(--text2);
+    transition: all 0.15s;
+  }
+  .seat-item:hover { background: var(--border); color: var(--text); border-color: var(--border2); }
+  .seat-item:active { cursor: grabbing; }
+
+  .seat-preview {
+    width: 28px;
+    height: 20px;
+    border-radius: 2px;
+    border: 1.5px solid currentColor;
+    flex-shrink: 0;
+    position: relative;
+  }
+  .seat-preview::after {
+    content: '';
+    position: absolute;
+    bottom: -5px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 10px;
+    height: 4px;
+    border-radius: 1px;
+    background: currentColor;
+    opacity: 0.5;
+  }
+  .seat-preview.study { color: var(--seat-study); }
+  .seat-preview.lecture { color: var(--seat-lecture); }
+
+  /* Page selector */
+  #page-list { display: flex; flex-direction: column; gap: 3px; }
+  .page-btn {
+    padding: 5px 8px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text2);
+    font-size: 10px;
+    cursor: pointer;
+    text-align: left;
+    font-family: 'IBM Plex Sans KR', sans-serif;
+    transition: all 0.12s;
+  }
+  .page-btn:hover { background: var(--surface2); color: var(--text); }
+  .page-btn.active { background: rgba(79,142,247,0.12); border-color: rgba(79,142,247,0.3); color: var(--accent); }
+
+  /* Options */
+  .option-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    font-size: 11px;
+    color: var(--text2);
+  }
+
+  .toggle {
+    width: 32px;
+    height: 18px;
+    border-radius: 9px;
+    background: var(--border);
+    cursor: pointer;
+    position: relative;
+    transition: background 0.15s;
+    border: none;
+    flex-shrink: 0;
+  }
+  .toggle::after {
+    content: '';
+    position: absolute;
+    left: 2px;
+    top: 2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--text3);
+    transition: all 0.15s;
+  }
+  .toggle.on { background: rgba(79,142,247,0.4); }
+  .toggle.on::after { left: 16px; background: var(--accent); }
+
+  select.mini {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text2);
+    font-size: 10px;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-family: 'IBM Plex Sans KR', sans-serif;
+  }
+
+  /* ── CANVAS AREA ── */
+  #canvas-wrap {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    background: #0a0d14;
+    background-image:
+      radial-gradient(circle at 50% 50%, rgba(79,142,247,0.02) 0%, transparent 70%);
+  }
+
+  #canvas-container {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  #canvas-container canvas { display: block; }
+
+  /* Drop overlay */
+  #drop-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15,17,23,0.97);
+    z-index: 50;
+    transition: opacity 0.3s;
+  }
+  #drop-overlay.hidden { display: none; }
+  #drop-overlay.drag-over { background: rgba(79,142,247,0.05); }
+
+  .drop-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.4; }
+  .drop-title { font-size: 18px; font-weight: 500; margin-bottom: 8px; color: var(--text); }
+  .drop-sub { font-size: 12px; color: var(--text3); margin-bottom: 24px; }
+
+  .drop-btn {
+    height: 40px;
+    padding: 0 24px;
+    border-radius: 6px;
+    border: 1px solid var(--accent);
+    background: rgba(79,142,247,0.1);
+    color: var(--accent);
+    font-family: 'IBM Plex Sans KR', sans-serif;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .drop-btn:hover { background: rgba(79,142,247,0.2); }
+
+  #file-input { display: none; }
+
+  /* Loading */
+  #loading {
+    position: absolute;
+    inset: 0;
+    background: rgba(15,17,23,0.9);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 60;
+    display: none;
+  }
+  .spinner {
+    width: 32px; height: 32px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin-bottom: 12px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { font-size: 12px; color: var(--text2); }
+
+  /* ── RIGHT PANEL ── */
+  #right-panel {
+    width: var(--prop-w);
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+
+  .prop-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(42,48,69,0.5);
+    font-size: 11px;
+  }
+  .prop-label { color: var(--text3); }
+  .prop-value { color: var(--text); font-family: 'IBM Plex Mono', monospace; font-size: 11px; }
+
+  .prop-input {
+    width: 80px;
+    height: 22px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text);
+    font-size: 11px;
+    font-family: 'IBM Plex Mono', monospace;
+    padding: 0 5px;
+    text-align: right;
+  }
+  .prop-input:focus { outline: none; border-color: var(--accent); }
+
+  .no-selection {
+    padding: 20px 12px;
+    text-align: center;
+    color: var(--text3);
+    font-size: 11px;
+    line-height: 1.7;
+  }
+
+  /* Zoom indicator */
+  #zoom-indicator {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 4px 12px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text2);
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  /* Status bar */
+  #statusbar {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    font-size: 10px;
+    color: var(--text3);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  /* Tooltip */
+  .kbd {
+    display: inline-block;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0 4px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    color: var(--text3);
+  }
+
+  /* Context hint */
+  #hint {
+    position: absolute;
+    bottom: 42px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(15,17,23,0.85);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 10px;
+    color: var(--text2);
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 10;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  #hint.visible { opacity: 1; }
+
+  /* Export dropdown */
+  .dropdown-wrap { position: relative; }
+  .dropdown-menu {
+    position: absolute;
+    top: 34px;
+    right: 0;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 5px;
+    overflow: hidden;
+    z-index: 200;
+    min-width: 140px;
+    display: none;
+  }
+  .dropdown-menu.open { display: block; }
+  .dropdown-item {
+    padding: 8px 12px;
+    font-size: 11px;
+    color: var(--text2);
+    cursor: pointer;
+    transition: background 0.1s;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .dropdown-item:hover { background: var(--border); color: var(--text); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <span class="logo">⬛ FloorEdit</span>
+  <div class="divider"></div>
+  <button class="btn" onclick="document.getElementById('file-input').click()">
+    📂 도면 열기
+  </button>
+  <button class="btn" id="btn-save" onclick="saveProject()" disabled>💾 저장</button>
+  <button class="btn" id="btn-load" onclick="loadProject()">📁 불러오기</button>
+  <div class="divider"></div>
+  <button class="btn" id="btn-undo" onclick="undo()" disabled title="실행취소 (Ctrl+Z)">↩</button>
+  <button class="btn" id="btn-redo" onclick="redo()" disabled title="다시실행 (Ctrl+Y)">↪</button>
+  <div class="divider"></div>
+  <button class="btn" onclick="zoomIn()">＋</button>
+  <button class="btn" onclick="zoomOut()">－</button>
+  <button class="btn" onclick="fitToScreen()" title="화면 맞춤">⊡</button>
+  <div class="spacer"></div>
+  <div id="seat-counter">🪑 좌석 0석</div>
+  <div class="divider"></div>
+  <div class="dropdown-wrap">
+    <button class="btn primary" onclick="toggleExportMenu()">⬇ 내보내기 ▾</button>
+    <div class="dropdown-menu" id="export-menu">
+      <div class="dropdown-item" onclick="exportPNG()">🖼 PNG 이미지</div>
+      <div class="dropdown-item" onclick="exportPDF()">📄 PDF 파일</div>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div id="main">
+
+  <!-- LEFT PANEL -->
+  <div id="left-panel">
+
+    <!-- 도구 -->
+    <div class="panel-section">
+      <div class="section-title">도구</div>
+      <div class="tool-grid">
+        <button class="tool-btn active" id="tool-select" onclick="setTool('select')">
+          <span class="icon">↖</span><span class="label">선택</span>
+        </button>
+        <button class="tool-btn" id="tool-seat" onclick="setTool('seat')">
+          <span class="icon">🪑</span><span class="label">좌석</span>
+        </button>
+        <button class="tool-btn" id="tool-text" onclick="setTool('text')">
+          <span class="icon">T</span><span class="label">텍스트</span>
+        </button>
+        <button class="tool-btn" id="tool-wall" onclick="setTool('wall')">
+          <span class="icon">▐</span><span class="label">벽체</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 좌석 유형 -->
+    <div class="panel-section">
+      <div class="section-title">좌석 유형</div>
+      <div class="seat-item" data-type="study" onclick="selectSeatType('study')">
+        <div class="seat-preview study"></div>
+        <div>
+          <div style="font-size:11px;color:var(--text)">자습형</div>
+          <div style="font-size:9px;color:var(--text3)">600×400mm</div>
+        </div>
+      </div>
+      <div class="seat-item" data-type="lecture" onclick="selectSeatType('lecture')">
+        <div class="seat-preview lecture" style="width:36px;height:16px;"></div>
+        <div>
+          <div style="font-size:11px;color:var(--text)">강의형</div>
+          <div style="font-size:9px;color:var(--text3)">750×450mm</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 간격 배치 -->
+    <div class="panel-section">
+      <div class="section-title">배열 배치</div>
+      <div style="font-size:10px;color:var(--text3);margin-bottom:6px;">행 × 열로 한번에 배치</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:6px;">
+        <div>
+          <div style="font-size:9px;color:var(--text3);margin-bottom:2px;">행 수</div>
+          <input type="number" id="arr-rows" value="3" min="1" max="20" class="prop-input" style="width:100%">
+        </div>
+        <div>
+          <div style="font-size:9px;color:var(--text3);margin-bottom:2px;">열 수</div>
+          <input type="number" id="arr-cols" value="5" min="1" max="20" class="prop-input" style="width:100%">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:6px;">
+        <div>
+          <div style="font-size:9px;color:var(--text3);margin-bottom:2px;">가로간격(px)</div>
+          <input type="number" id="arr-gapx" value="50" min="10" class="prop-input" style="width:100%">
+        </div>
+        <div>
+          <div style="font-size:9px;color:var(--text3);margin-bottom:2px;">세로간격(px)</div>
+          <input type="number" id="arr-gapy" value="40" min="10" class="prop-input" style="width:100%">
+        </div>
+      </div>
+      <button class="btn primary" style="width:100%;justify-content:center;" onclick="placeArray()">배열 배치</button>
+    </div>
+
+    <!-- 옵션 -->
+    <div class="panel-section">
+      <div class="section-title">옵션</div>
+      <div class="option-row">
+        <span>격자 스냅</span>
+        <button class="toggle on" id="toggle-snap" onclick="toggleSnap()"></button>
+      </div>
+      <div class="option-row">
+        <span>격자 크기</span>
+        <select class="mini" id="grid-size" onchange="updateGrid()">
+          <option value="10">10px</option>
+          <option value="20" selected>20px</option>
+          <option value="40">40px</option>
+        </select>
+      </div>
+      <div class="option-row">
+        <span>격자 표시</span>
+        <button class="toggle" id="toggle-grid" onclick="toggleGridVis()"></button>
+      </div>
+    </div>
+
+    <!-- 페이지 -->
+    <div class="panel-section">
+      <div class="section-title">페이지</div>
+      <div id="page-list">
+        <div style="font-size:10px;color:var(--text3)">도면을 먼저 불러오세요</div>
+      </div>
+    </div>
+
+    <!-- 선택 작업 -->
+    <div class="panel-section">
+      <div class="section-title">선택 작업</div>
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        <button class="btn" onclick="selectAll()" style="justify-content:center;">모두 선택</button>
+        <button class="btn" onclick="deleteSelected()" style="justify-content:center;" id="btn-delete" disabled>선택 삭제</button>
+        <button class="btn" onclick="duplicateSelected()" style="justify-content:center;" id="btn-dup" disabled>복사</button>
+        <button class="btn danger" onclick="clearAll()" style="justify-content:center;">전체 지우기</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- CANVAS -->
+  <div id="canvas-wrap">
+    <div id="drop-overlay">
+      <div class="drop-icon">📐</div>
+      <div class="drop-title">도면 PDF를 불러오세요</div>
+      <div class="drop-sub">파일을 여기에 끌어다 놓거나 버튼을 클릭하세요</div>
+      <button class="drop-btn" onclick="document.getElementById('file-input').click()">📂 PDF 파일 선택</button>
+    </div>
+    <div id="loading">
+      <div class="spinner"></div>
+      <div class="loading-text">도면을 불러오는 중...</div>
+    </div>
+    <div id="canvas-container">
+      <canvas id="c"></canvas>
+    </div>
+    <div id="zoom-indicator">100%</div>
+    <div id="hint">클릭하여 좌석 배치</div>
+    <div id="statusbar">FloorEdit v0.1</div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div id="right-panel">
+    <div class="panel-section">
+      <div class="section-title">속성</div>
+      <div id="props-area">
+        <div class="no-selection">
+          객체를 선택하면<br>속성이 표시됩니다
+        </div>
+      </div>
+    </div>
+    <div class="panel-section">
+      <div class="section-title">도면 정보</div>
+      <div id="plan-info" style="font-size:10px;color:var(--text3);line-height:1.8;">
+        도면 없음
+      </div>
+    </div>
+    <div class="panel-section">
+      <div class="section-title">실별 좌석</div>
+      <div id="room-stats" style="font-size:10px;color:var(--text3);">
+        레이블을 입력하면<br>자동 집계됩니다
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<input type="file" id="file-input" accept=".pdf" onchange="loadPDF(this)">
+
+<script>
+// ══════════════════════════════════════════════════
+//  GLOBAL STATE
+// ══════════════════════════════════════════════════
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+let canvas, ctx;
+let pdfDoc = null;
+let currentPage = 1;
+let totalPages = 0;
+let currentTool = 'select';
+let currentSeatType = 'study';
+let snapEnabled = true;
+let gridVisible = false;
+let gridSize = 20;
+let zoom = 1.0;
+let pdfWidth = 0, pdfHeight = 0;
+let fileName = '';
+
+// Undo/Redo
+let history = [];
+let historyIndex = -1;
+const MAX_HISTORY = 30;
+
+// Wall drawing
+let isDrawingWall = false;
+let wallStart = null;
+let wallPreview = null;
+
+// ══════════════════════════════════════════════════
+//  INIT CANVAS
+// ══════════════════════════════════════════════════
+window.addEventListener('load', () => {
+  const wrap = document.getElementById('canvas-container');
+  const w = wrap.clientWidth || 800;
+  const h = wrap.clientHeight || 600;
+
+  canvas = new fabric.Canvas('c', {
+    width: w,
+    height: h,
+    backgroundColor: '#0a0d14',
+    selection: true,
+  });
+
+  // Resize
+  window.addEventListener('resize', () => {
+    const ww = wrap.clientWidth;
+    const wh = wrap.clientHeight;
+    canvas.setWidth(ww);
+    canvas.setHeight(wh);
+    canvas.renderAll();
+  });
+
+  // Events
+  canvas.on('mouse:down', onMouseDown);
+  canvas.on('mouse:move', onMouseMove);
+  canvas.on('mouse:up', onMouseUp);
+  canvas.on('mouse:wheel', onMouseWheel);
+  canvas.on('selection:created', onSelectionChange);
+  canvas.on('selection:updated', onSelectionChange);
+  canvas.on('selection:cleared', onSelectionCleared);
+  canvas.on('object:modified', () => { saveHistory(); updateSeatCounter(); });
+  canvas.on('object:added', () => updateSeatCounter());
+  canvas.on('object:removed', () => updateSeatCounter());
+
+  // Drag-pan with middle mouse
+  let isPanning = false, lastPan = null;
+  canvas.on('mouse:down', (e) => {
+    if (e.e.button === 1 || (e.e.button === 0 && e.e.altKey)) {
+      isPanning = true;
+      lastPan = { x: e.e.clientX, y: e.e.clientY };
+      canvas.defaultCursor = 'grabbing';
+    }
+  });
+  canvas.on('mouse:move', (e) => {
+    if (isPanning && lastPan) {
+      const dx = e.e.clientX - lastPan.x;
+      const dy = e.e.clientY - lastPan.y;
+      canvas.relativePan({ x: dx, y: dy });
+      lastPan = { x: e.e.clientX, y: e.e.clientY };
+    }
+  });
+  canvas.on('mouse:up', () => {
+    if (isPanning) {
+      isPanning = false;
+      lastPan = null;
+      canvas.defaultCursor = 'default';
+    }
+  });
+
+  // Keyboard
+  document.addEventListener('keydown', onKeyDown);
+
+  // Drop zone
+  const wrap2 = document.getElementById('canvas-wrap');
+  wrap2.addEventListener('dragover', (e) => { e.preventDefault(); document.getElementById('drop-overlay').classList.add('drag-over'); });
+  wrap2.addEventListener('dragleave', () => document.getElementById('drop-overlay').classList.remove('drag-over'));
+  wrap2.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file && file.type === 'application/pdf') loadPDFFile(file);
+  });
+
+  // Click outside dropdown
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.dropdown-wrap')) {
+      document.getElementById('export-menu').classList.remove('open');
+    }
+  });
+});
+
+// ══════════════════════════════════════════════════
+//  PDF LOAD
+// ══════════════════════════════════════════════════
+function loadPDF(input) {
+  if (!input.files[0]) return;
+  loadPDFFile(input.files[0]);
+}
+
+function loadPDFFile(file) {
+  fileName = file.name.replace('.pdf', '');
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    document.getElementById('loading').style.display = 'flex';
+    pdfjsLib.getDocument({ data: e.target.result }).promise.then((doc) => {
+      pdfDoc = doc;
+      totalPages = doc.numPages;
+      buildPageList();
+      renderPage(1).then(() => {
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('drop-overlay').classList.add('hidden');
+        document.getElementById('btn-save').disabled = false;
+        updatePlanInfo();
+      });
+    }).catch(() => {
+      document.getElementById('loading').style.display = 'none';
+      alert('PDF 파일을 불러올 수 없습니다.');
+    });
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function renderPage(pageNum) {
+  currentPage = pageNum;
+  const page = await pdfDoc.getPage(pageNum);
+  const vp = page.getViewport({ scale: 1.5 });
+  pdfWidth = vp.width;
+  pdfHeight = vp.height;
+
+  const offCanvas = document.createElement('canvas');
+  offCanvas.width = vp.width;
+  offCanvas.height = vp.height;
+  const offCtx = offCanvas.getContext('2d');
+  await page.render({ canvasContext: offCtx, viewport: vp }).promise;
+
+  // Remove old background
+  const existing = canvas.getObjects('image');
+  existing.forEach(o => { if (o._isBg) canvas.remove(o); });
+  const existingRect = canvas.getObjects('rect');
+  existingRect.forEach(o => { if (o._isBg) canvas.remove(o); });
+
+  fabric.Image.fromURL(offCanvas.toDataURL(), (img) => {
+    img._isBg = true;
+    img.set({
+      left: 20, top: 20,
+      selectable: false,
+      evented: false,
+      hoverCursor: 'default',
+    });
+    canvas.add(img);
+    canvas.sendToBack(img);
+
+    // Fit to screen
+    const cw = canvas.width - 40;
+    const ch = canvas.height - 40;
+    const s = Math.min(cw / pdfWidth, ch / pdfHeight, 1);
+    zoom = s;
+    canvas.setViewportTransform([s, 0, 0, s, 20, 20]);
+    document.getElementById('zoom-indicator').textContent = Math.round(s * 100) + '%';
+
+    canvas.renderAll();
+    updatePageList();
+  });
+}
+
+// ══════════════════════════════════════════════════
+//  PAGE LIST
+// ══════════════════════════════════════════════════
+const PAGE_LABELS = {
+  1: 'B1F 평면도',
+  2: '1F 서측',
+  3: '1F 동측',
+  4: '2F 북측',
+  5: '2F 남측',
+  6: '6F 북측',
+  7: '6F 남측',
+};
+
+function buildPageList() {
+  const list = document.getElementById('page-list');
+  list.innerHTML = '';
+  for (let i = 1; i <= totalPages; i++) {
+    const btn = document.createElement('button');
+    btn.className = 'page-btn' + (i === currentPage ? ' active' : '');
+    btn.textContent = `${i}. ${PAGE_LABELS[i] || 'Page ' + i}`;
+    btn.onclick = () => {
+      document.getElementById('loading').style.display = 'flex';
+      renderPage(i).then(() => {
+        document.getElementById('loading').style.display = 'none';
+      });
+    };
+    list.appendChild(btn);
+  }
+}
+
+function updatePageList() {
+  document.querySelectorAll('.page-btn').forEach((btn, i) => {
+    btn.classList.toggle('active', i + 1 === currentPage);
+  });
+}
+
+// ══════════════════════════════════════════════════
+//  TOOL / SEAT TYPE
+// ══════════════════════════════════════════════════
+function setTool(tool) {
+  currentTool = tool;
+  document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tool-' + tool)?.classList.add('active');
+
+  canvas.isDrawingMode = false;
+  canvas.selection = (tool === 'select');
+  canvas.defaultCursor = tool === 'seat' ? 'crosshair' : tool === 'text' ? 'text' : tool === 'wall' ? 'crosshair' : 'default';
+
+  const hint = document.getElementById('hint');
+  if (tool === 'seat') { hint.textContent = '클릭하여 좌석 배치 (Esc: 취소)'; hint.classList.add('visible'); }
+  else if (tool === 'text') { hint.textContent = '클릭하여 텍스트 입력'; hint.classList.add('visible'); }
+  else if (tool === 'wall') { hint.textContent = '클릭 후 드래그로 벽체 그리기'; hint.classList.add('visible'); }
+  else { hint.classList.remove('visible'); }
+}
+
+function selectSeatType(type) {
+  currentSeatType = type;
+  document.querySelectorAll('.seat-item').forEach(el => {
+    el.style.borderColor = el.dataset.type === type ? 'var(--accent)' : 'var(--border)';
+  });
+  setTool('seat');
+}
+
+// ══════════════════════════════════════════════════
+//  MOUSE EVENTS
+// ══════════════════════════════════════════════════
+function onMouseDown(e) {
+  if (e.target && e.target._isBg === undefined && currentTool === 'select') return;
+
+  const pt = canvas.getPointer(e.e);
+  const snapped = snapEnabled ? snap(pt) : pt;
+
+  if (currentTool === 'seat' && !e.target?._isBg && !e.target) {
+    placeSeat(snapped.x, snapped.y);
+    saveHistory();
+  } else if (currentTool === 'seat' && e.target?._isBg) {
+    placeSeat(snapped.x, snapped.y);
+    saveHistory();
+  } else if (currentTool === 'text' && (e.target?._isBg || !e.target)) {
+    placeText(snapped.x, snapped.y);
+  } else if (currentTool === 'wall') {
+    if (!isDrawingWall) {
+      isDrawingWall = true;
+      wallStart = snapped;
+    }
+  }
+}
+
+function onMouseMove(e) {
+  if (currentTool === 'wall' && isDrawingWall && wallStart) {
+    const pt = canvas.getPointer(e.e);
+    const snapped = snapEnabled ? snap(pt) : pt;
+
+    if (wallPreview) canvas.remove(wallPreview);
+    wallPreview = new fabric.Line(
+      [wallStart.x, wallStart.y, snapped.x, snapped.y],
+      { stroke: '#94a3b8', strokeWidth: 6, selectable: false, evented: false, _isWallPreview: true }
+    );
+    canvas.add(wallPreview);
+    canvas.renderAll();
+  }
+}
+
+function onMouseUp(e) {
+  if (currentTool === 'wall' && isDrawingWall && wallStart) {
+    const pt = canvas.getPointer(e.e);
+    const snapped = snapEnabled ? snap(pt) : pt;
+
+    if (wallPreview) canvas.remove(wallPreview);
+
+    const dx = snapped.x - wallStart.x;
+    const dy = snapped.y - wallStart.y;
+    if (Math.sqrt(dx*dx + dy*dy) > 5) {
+      const wall = new fabric.Line(
+        [wallStart.x, wallStart.y, snapped.x, snapped.y],
+        {
+          stroke: '#e2e8f0',
+          strokeWidth: 6,
+          selectable: true,
+          hasControls: true,
+          _type: 'wall',
+        }
+      );
+      canvas.add(wall);
+      saveHistory();
+    }
+    isDrawingWall = false;
+    wallStart = null;
+    wallPreview = null;
+  }
+}
+
+function onMouseWheel(e) {
+  const delta = e.e.deltaY;
+  let z = canvas.getZoom();
+  z *= delta > 0 ? 0.9 : 1.1;
+  z = Math.min(Math.max(z, 0.1), 5);
+  canvas.zoomToPoint({ x: e.e.offsetX, y: e.e.offsetY }, z);
+  zoom = z;
+  document.getElementById('zoom-indicator').textContent = Math.round(z * 100) + '%';
+  e.e.preventDefault();
+}
+
+// ══════════════════════════════════════════════════
+//  PLACE OBJECTS
+// ══════════════════════════════════════════════════
+function snap(pt) {
+  return {
+    x: Math.round(pt.x / gridSize) * gridSize,
+    y: Math.round(pt.y / gridSize) * gridSize,
+  };
+}
+
+function placeSeat(x, y) {
+  const isStudy = currentSeatType === 'study';
+  const w = isStudy ? 36 : 44;
+  const h = isStudy ? 26 : 22;
+  const color = isStudy ? '#4f8ef7' : '#a78bfa';
+
+  // Desk
+  const desk = new fabric.Rect({
+    width: w, height: h,
+    fill: color + '22',
+    stroke: color,
+    strokeWidth: 1.5,
+    rx: 2, ry: 2,
+  });
+
+  // Chair
+  const chair = new fabric.Rect({
+    width: w * 0.6,
+    height: 7,
+    fill: color + '44',
+    stroke: color,
+    strokeWidth: 1,
+    rx: 1, ry: 1,
+    top: h + 3,
+    left: w * 0.2,
+  });
+
+  const seat = new fabric.Group([desk, chair], {
+    left: x - w / 2,
+    top: y - h / 2,
+    _type: 'seat',
+    _seatType: currentSeatType,
+    _label: '',
+    hasControls: true,
+    lockScalingX: true,
+    lockScalingY: true,
+  });
+
+  seat.setControlsVisibility({
+    mt: false, mb: false, ml: false, mr: false,
+    tl: false, tr: false, bl: false, br: false,
+    mtr: true,
+  });
+
+  canvas.add(seat);
+  canvas.setActiveObject(seat);
+  canvas.renderAll();
+}
+
+function placeText(x, y) {
+  const text = new fabric.IText('텍스트 입력', {
+    left: x,
+    top: y,
+    fontSize: 12,
+    fill: '#fbbf24',
+    fontFamily: 'IBM Plex Sans KR, sans-serif',
+    _type: 'label',
+    _label: '',
+    editable: true,
+  });
+  canvas.add(text);
+  canvas.setActiveObject(text);
+  text.enterEditing();
+  text.selectAll();
+  canvas.renderAll();
+  saveHistory();
+  setTool('select');
+}
+
+// ══════════════════════════════════════════════════
+//  ARRAY PLACEMENT
+// ══════════════════════════════════════════════════
+function placeArray() {
+  const rows = parseInt(document.getElementById('arr-rows').value);
+  const cols = parseInt(document.getElementById('arr-cols').value);
+  const gapX = parseInt(document.getElementById('arr-gapx').value);
+  const gapY = parseInt(document.getElementById('arr-gapy').value);
+
+  const isStudy = currentSeatType === 'study';
+  const sw = isStudy ? 36 : 44;
+  const sh = isStudy ? 26 : 22;
+
+  const vpt = canvas.viewportTransform;
+  const startX = (canvas.width / 2 - vpt[4]) / vpt[0] - (cols * (sw + gapX)) / 2;
+  const startY = (canvas.height / 2 - vpt[5]) / vpt[3] - (rows * (sh + gapY)) / 2;
+
+  const group = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x = startX + c * (sw + gapX);
+      const y = startY + r * (sh + gapY);
+      placeSeatAt(x, y, group);
+    }
+  }
+  saveHistory();
+  updateSeatCounter();
+  setTool('select');
+  document.getElementById('hint').classList.remove('visible');
+}
+
+function placeSeatAt(x, y, arr) {
+  const isStudy = currentSeatType === 'study';
+  const w = isStudy ? 36 : 44;
+  const h = isStudy ? 26 : 22;
+  const color = isStudy ? '#4f8ef7' : '#a78bfa';
+
+  const desk = new fabric.Rect({ width: w, height: h, fill: color + '22', stroke: color, strokeWidth: 1.5, rx: 2, ry: 2 });
+  const chair = new fabric.Rect({ width: w * 0.6, height: 7, fill: color + '44', stroke: color, strokeWidth: 1, rx: 1, ry: 1, top: h + 3, left: w * 0.2 });
+
+  const seat = new fabric.Group([desk, chair], {
+    left: x, top: y,
+    _type: 'seat', _seatType: isStudy ? 'study' : 'lecture', _label: '',
+    hasControls: true, lockScalingX: true, lockScalingY: true,
+  });
+  seat.setControlsVisibility({ mt: false, mb: false, ml: false, mr: false, tl: false, tr: false, bl: false, br: false, mtr: true });
+  canvas.add(seat);
+  if (arr) arr.push(seat);
+}
+
+// ══════════════════════════════════════════════════
+//  SELECTION
+// ══════════════════════════════════════════════════
+function onSelectionChange(e) {
+  const objs = canvas.getActiveObjects();
+  document.getElementById('btn-delete').disabled = false;
+  document.getElementById('btn-dup').disabled = false;
+  renderProps(objs);
+}
+
+function onSelectionCleared() {
+  document.getElementById('btn-delete').disabled = true;
+  document.getElementById('btn-dup').disabled = true;
+  document.getElementById('props-area').innerHTML = '<div class="no-selection">객체를 선택하면<br>속성이 표시됩니다</div>';
+}
+
+function renderProps(objs) {
+  if (!objs || objs.length === 0) { onSelectionCleared(); return; }
+
+  const first = objs[0];
+  const isMulti = objs.length > 1;
+
+  let html = '';
+
+  if (isMulti) {
+    html += `<div class="prop-row"><span class="prop-label">선택 수</span><span class="prop-value">${objs.length}개</span></div>`;
+    const seats = objs.filter(o => o._type === 'seat').length;
+    if (seats > 0) html += `<div class="prop-row"><span class="prop-label">좌석</span><span class="prop-value">${seats}석</span></div>`;
+  } else {
+    const type = first._type || (first.type === 'i-text' ? 'label' : first.type);
+    html += `<div class="prop-row"><span class="prop-label">유형</span><span class="prop-value">${
+      type === 'seat' ? (first._seatType === 'study' ? '자습형 좌석' : '강의형 좌석') :
+      type === 'label' ? '텍스트' : type === 'wall' ? '벽체' : type
+    }</span></div>`;
+    html += `<div class="prop-row"><span class="prop-label">X</span><span class="prop-value">${Math.round(first.left)}</span></div>`;
+    html += `<div class="prop-row"><span class="prop-label">Y</span><span class="prop-value">${Math.round(first.top)}</span></div>`;
+    html += `<div class="prop-row"><span class="prop-label">회전</span><span class="prop-value">${Math.round(first.angle || 0)}°</span></div>`;
+
+    if (type === 'seat' || type === 'label') {
+      html += `<div class="prop-row" style="flex-direction:column;align-items:flex-start;gap:4px;">
+        <span class="prop-label">레이블 (방 이름)</span>
+        <input class="prop-input" style="width:100%" id="prop-label-input"
+          value="${first._label || ''}" placeholder="예: 자습실 A"
+          onchange="setLabel(this.value)" oninput="setLabel(this.value)">
+      </div>`;
+    }
+
+    if (type === 'wall') {
+      html += `<div class="prop-row">
+        <span class="prop-label">두께</span>
+        <input type="range" min="2" max="20" value="${first.strokeWidth || 6}"
+          oninput="setWallWidth(this.value)" style="width:80px">
+      </div>`;
+    }
+  }
+
+  document.getElementById('props-area').innerHTML = html;
+}
+
+function setLabel(val) {
+  const obj = canvas.getActiveObject();
+  if (obj) {
+    obj._label = val;
+    updateRoomStats();
+    canvas.renderAll();
+  }
+}
+
+function setWallWidth(val) {
+  const obj = canvas.getActiveObject();
+  if (obj) { obj.set('strokeWidth', parseInt(val)); canvas.renderAll(); }
+}
+
+// ══════════════════════════════════════════════════
+//  COUNTERS
+// ══════════════════════════════════════════════════
+function updateSeatCounter() {
+  const seats = canvas.getObjects().filter(o => o._type === 'seat').length;
+  document.getElementById('seat-counter').textContent = `🪑 좌석 ${seats}석`;
+  updateRoomStats();
+}
+
+function updateRoomStats() {
+  const seats = canvas.getObjects().filter(o => o._type === 'seat');
+  const rooms = {};
+  seats.forEach(s => {
+    const label = s._label || '(레이블 없음)';
+    rooms[label] = (rooms[label] || 0) + 1;
+  });
+
+  const total = seats.length;
+  if (total === 0) {
+    document.getElementById('room-stats').textContent = '레이블을 입력하면\n자동 집계됩니다';
+    return;
+  }
+
+  let html = '';
+  Object.entries(rooms).forEach(([room, cnt]) => {
+    html += `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border);">
+      <span style="color:var(--text2);font-size:10px;">${room}</span>
+      <span style="color:var(--green);font-family:'IBM Plex Mono',monospace;font-size:10px;">${cnt}석</span>
+    </div>`;
+  });
+  html += `<div style="display:flex;justify-content:space-between;padding:4px 0;margin-top:2px;">
+    <span style="color:var(--text);font-size:11px;font-weight:500;">합계</span>
+    <span style="color:var(--green);font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;">${total}석</span>
+  </div>`;
+  document.getElementById('room-stats').innerHTML = html;
+}
+
+function updatePlanInfo() {
+  const labels = { 1:'B1F 평면도', 2:'1F 서측', 3:'1F 동측', 4:'2F 북측', 5:'2F 남측', 6:'6F 북측', 7:'6F 남측' };
+  document.getElementById('plan-info').innerHTML = `
+    <div>파일: ${fileName || '-'}</div>
+    <div>페이지: ${currentPage}/${totalPages}</div>
+    <div>층: ${labels[currentPage] || '-'}</div>
+    <div>축척: 1/100</div>
+  `;
+}
+
+// ══════════════════════════════════════════════════
+//  EDIT OPERATIONS
+// ══════════════════════════════════════════════════
+function deleteSelected() {
+  const objs = canvas.getActiveObjects();
+  objs.forEach(o => canvas.remove(o));
+  canvas.discardActiveObject();
+  canvas.renderAll();
+  saveHistory();
+}
+
+function duplicateSelected() {
+  const objs = canvas.getActiveObjects();
+  canvas.discardActiveObject();
+  const newObjs = [];
+  let done = 0;
+  objs.forEach(o => {
+    o.clone(cloned => {
+      cloned.set({ left: o.left + 20, top: o.top + 20 });
+      cloned._type = o._type;
+      cloned._seatType = o._seatType;
+      cloned._label = o._label;
+      canvas.add(cloned);
+      newObjs.push(cloned);
+      done++;
+      if (done === objs.length) {
+        const sel = new fabric.ActiveSelection(newObjs, { canvas });
+        canvas.setActiveObject(sel);
+        canvas.renderAll();
+        saveHistory();
+      }
+    });
+  });
+}
+
+function selectAll() {
+  const objs = canvas.getObjects().filter(o => !o._isBg);
+  if (objs.length === 0) return;
+  const sel = new fabric.ActiveSelection(objs, { canvas });
+  canvas.setActiveObject(sel);
+  canvas.renderAll();
+}
+
+function clearAll() {
+  if (!confirm('편집 레이어의 모든 객체를 삭제할까요?')) return;
+  const objs = canvas.getObjects().filter(o => !o._isBg);
+  objs.forEach(o => canvas.remove(o));
+  canvas.renderAll();
+  saveHistory();
+}
+
+// ══════════════════════════════════════════════════
+//  ZOOM / PAN
+// ══════════════════════════════════════════════════
+function zoomIn() {
+  zoom = Math.min(zoom * 1.2, 5);
+  canvas.setZoom(zoom);
+  document.getElementById('zoom-indicator').textContent = Math.round(zoom * 100) + '%';
+}
+
+function zoomOut() {
+  zoom = Math.max(zoom * 0.8, 0.1);
+  canvas.setZoom(zoom);
+  document.getElementById('zoom-indicator').textContent = Math.round(zoom * 100) + '%';
+}
+
+function fitToScreen() {
+  if (!pdfWidth || !pdfHeight) return;
+  const cw = canvas.width - 40;
+  const ch = canvas.height - 40;
+  const s = Math.min(cw / pdfWidth, ch / pdfHeight, 1.5);
+  zoom = s;
+  canvas.setViewportTransform([s, 0, 0, s, 20, 20]);
+  document.getElementById('zoom-indicator').textContent = Math.round(s * 100) + '%';
+}
+
+// ══════════════════════════════════════════════════
+//  GRID
+// ══════════════════════════════════════════════════
+function toggleSnap() {
+  snapEnabled = !snapEnabled;
+  const btn = document.getElementById('toggle-snap');
+  btn.classList.toggle('on', snapEnabled);
+}
+
+function updateGrid() {
+  gridSize = parseInt(document.getElementById('grid-size').value);
+}
+
+function toggleGridVis() {
+  gridVisible = !gridVisible;
+  const btn = document.getElementById('toggle-grid');
+  btn.classList.toggle('on', gridVisible);
+  drawGrid();
+}
+
+function drawGrid() {
+  // Remove old grid
+  canvas.getObjects().filter(o => o._isGrid).forEach(o => canvas.remove(o));
+  if (!gridVisible) { canvas.renderAll(); return; }
+
+  const w = pdfWidth || canvas.width;
+  const h = pdfHeight || canvas.height;
+  const lines = [];
+
+  for (let x = 0; x <= w; x += gridSize) {
+    lines.push(new fabric.Line([x, 0, x, h], { stroke: 'rgba(79,142,247,0.1)', strokeWidth: 0.5, selectable: false, evented: false, _isGrid: true }));
+  }
+  for (let y = 0; y <= h; y += gridSize) {
+    lines.push(new fabric.Line([0, y, w, y], { stroke: 'rgba(79,142,247,0.1)', strokeWidth: 0.5, selectable: false, evented: false, _isGrid: true }));
+  }
+  lines.forEach(l => canvas.add(l));
+  // Send grid behind everything except bg
+  canvas.getObjects().filter(o => !o._isBg).forEach(o => canvas.sendToBack(o));
+  canvas.getObjects().filter(o => o._isBg).forEach(o => canvas.sendToBack(o));
+  canvas.renderAll();
+}
+
+// ══════════════════════════════════════════════════
+//  UNDO / REDO
+// ══════════════════════════════════════════════════
+function saveHistory() {
+  const json = JSON.stringify(canvas.toJSON(['_type', '_seatType', '_label', '_isBg']));
+  if (historyIndex < history.length - 1) history = history.slice(0, historyIndex + 1);
+  history.push(json);
+  if (history.length > MAX_HISTORY) history.shift();
+  historyIndex = history.length - 1;
+  document.getElementById('btn-undo').disabled = historyIndex <= 0;
+  document.getElementById('btn-redo').disabled = true;
+}
+
+function undo() {
+  if (historyIndex <= 0) return;
+  historyIndex--;
+  loadHistoryState();
+  document.getElementById('btn-undo').disabled = historyIndex <= 0;
+  document.getElementById('btn-redo').disabled = false;
+}
+
+function redo() {
+  if (historyIndex >= history.length - 1) return;
+  historyIndex++;
+  loadHistoryState();
+  document.getElementById('btn-redo').disabled = historyIndex >= history.length - 1;
+  document.getElementById('btn-undo').disabled = false;
+}
+
+function loadHistoryState() {
+  const state = JSON.parse(history[historyIndex]);
+  canvas.loadFromJSON(state, () => {
+    canvas.renderAll();
+    updateSeatCounter();
+  });
+}
+
+// ══════════════════════════════════════════════════
+//  SAVE / LOAD PROJECT
+// ══════════════════════════════════════════════════
+function saveProject() {
+  const data = {
+    version: '0.1',
+    fileName,
+    page: currentPage,
+    canvas: canvas.toJSON(['_type', '_seatType', '_label', '_isBg']),
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (fileName || 'project') + '.flooredit.json';
+  a.click();
+}
+
+function loadProject() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json';
+  input.onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const data = JSON.parse(ev.target.result);
+      canvas.loadFromJSON(data.canvas, () => {
+        canvas.renderAll();
+        updateSeatCounter();
+        fileName = data.fileName || '';
+      });
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+// ══════════════════════════════════════════════════
+//  EXPORT
+// ══════════════════════════════════════════════════
+function toggleExportMenu() {
+  document.getElementById('export-menu').classList.toggle('open');
+}
+
+function exportPNG() {
+  document.getElementById('export-menu').classList.remove('open');
+  canvas.discardActiveObject();
+  canvas.renderAll();
+
+  const dataURL = canvas.toDataURL({
+    format: 'png',
+    quality: 1.0,
+    multiplier: 2,
+  });
+  const a = document.createElement('a');
+  a.href = dataURL;
+  a.download = (fileName || 'flooredit') + '_배치안.png';
+  a.click();
+}
+
+function exportPDF() {
+  document.getElementById('export-menu').classList.remove('open');
+  canvas.discardActiveObject();
+  canvas.renderAll();
+
+  const dataURL = canvas.toDataURL({ format: 'png', quality: 1.0, multiplier: 2 });
+  const img = new Image();
+  img.onload = () => {
+    const w = img.width;
+    const h = img.height;
+
+    // Use jsPDF via CDN (loaded dynamically)
+    if (typeof jsPDF === 'undefined') {
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+      script.onload = () => doExportPDF(dataURL, w, h);
+      document.head.appendChild(script);
+    } else {
+      doExportPDF(dataURL, w, h);
+    }
+  };
+  img.src = dataURL;
+}
+
+function doExportPDF(dataURL, imgW, imgH) {
+  const { jsPDF } = window.jspdf;
+  const orient = imgW > imgH ? 'landscape' : 'portrait';
+  const doc = new jsPDF({ orientation: orient, unit: 'px', format: [imgW, imgH] });
+  doc.addImage(dataURL, 'PNG', 0, 0, imgW, imgH);
+  doc.save((fileName || 'flooredit') + '_배치안.pdf');
+}
+
+// ══════════════════════════════════════════════════
+//  KEYBOARD
+// ══════════════════════════════════════════════════
+function onKeyDown(e) {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+  if (e.key === 'Escape') { setTool('select'); isDrawingWall = false; wallStart = null; if (wallPreview) { canvas.remove(wallPreview); wallPreview = null; } canvas.renderAll(); }
+  if (e.key === 'Delete' || e.key === 'Backspace') { const a = canvas.getActiveObjects(); if (a.length) { deleteSelected(); } }
+  if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
+  if (e.ctrlKey && e.key === 'y') { e.preventDefault(); redo(); }
+  if (e.ctrlKey && e.key === 'd') { e.preventDefault(); duplicateSelected(); }
+  if (e.ctrlKey && e.key === 'a') { e.preventDefault(); selectAll(); }
+
+  // Arrow nudge
+  const objs = canvas.getActiveObjects();
+  if (objs.length > 0 && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)) {
+    const step = e.shiftKey ? gridSize : (snapEnabled ? gridSize : 1);
+    objs.forEach(o => {
+      if (e.key === 'ArrowLeft') o.set('left', o.left - step);
+      if (e.key === 'ArrowRight') o.set('left', o.left + step);
+      if (e.key === 'ArrowUp') o.set('top', o.top - step);
+      if (e.key === 'ArrowDown') o.set('top', o.top + step);
+      o.setCoords();
+    });
+    canvas.renderAll();
+    e.preventDefault();
+  }
+
+  // Tool shortcuts
+  if (e.key === 'v' || e.key === 'V') setTool('select');
+  if (e.key === 's' || e.key === 'S') setTool('seat');
+  if (e.key === 't' || e.key === 'T') setTool('text');
+  if (e.key === 'w' || e.key === 'W') setTool('wall');
+}
+</script>
+</body>
+</html>
